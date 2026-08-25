@@ -8,16 +8,26 @@ import {
   logout,
   getMe,
 } from "../controllers/auth.controller.js";
+
 import { verifyToken } from "../middlewares/auth.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+
+import {
+  registerSchema,
+  verifyPhoneSchema,
+  resendPhoneOtpSchema,
+  loginSchema,
+  refreshSchema,
+} from "../validations/auth.validation.js";
 
 const router = express.Router();
 
-// Public Routes
-router.post("/register", register);
-router.post("/verify-phone", verifyPhone);
-router.post("/resend-phone-otp", resendPhoneOtp);
-router.post("/login", login);
-router.post("/refresh", refresh);
+// Public Routes (with validation middleware)
+router.post("/register", validate(registerSchema), register);
+router.post("/verify-phone", validate(verifyPhoneSchema), verifyPhone);
+router.post("/resend-phone-otp", validate(resendPhoneOtpSchema), resendPhoneOtp);
+router.post("/login", validate(loginSchema), login);
+router.post("/refresh", validate(refreshSchema), refresh);
 
 // Protected Routes
 router.post("/logout", verifyToken, logout);
