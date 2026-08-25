@@ -57,9 +57,7 @@ export default function LoginPage() {
       localStorage.setItem("accessToken", response.data.accessToken);
       localStorage.setItem("refreshToken", response.data.refreshToken);
 
-      alert("Login successful!");
-      // TODO: Redirect to Dashboard / Onboarding
-      // navigate("/dashboard");
+      navigate("/onboarding");
 
     } catch (err) {
       setError(err.response?.data?.message || "Invalid OTP. Please try again.");
