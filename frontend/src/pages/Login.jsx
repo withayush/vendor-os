@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import { loginUser } from "../services/auth.api";
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth(); // AuthContext ka login function
 
   const [form, setForm] = useState({
     email: "",
@@ -29,19 +31,17 @@ export default function Login() {
       const response = await loginUser(form);
       console.log("Login Success:", response);
 
-      // Backend se jo tokens aur user data mila hai, use filhal localStorage mein save kar lete hain
       const { accessToken, refreshToken, account, vendor } = response.data;
       
-      localStorage.setItem("accessToken", accessToken);
-      localStorage.setItem("refreshToken", refreshToken);
-      localStorage.setItem("user", JSON.stringify(account));
+      // AuthContext handle karega localStorage mein tokens/user save karna aur state update karna
+      login(account, accessToken, refreshToken);
+      
+      // Agar vendor profile bhi aayi hai toh use bhi save kar lete hain
       if (vendor) {
         localStorage.setItem("vendor", JSON.stringify(vendor));
       }
 
       alert("Login successful! Redirecting to Dashboard...");
-      
-      // Ab user ko Dashboard par bhej do
       navigate("/dashboard");
     } catch (err) {
       setError(

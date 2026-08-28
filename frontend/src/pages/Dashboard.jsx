@@ -1,15 +1,12 @@
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext"; // AuthContext import kiya
 
 export default function Dashboard() {
   const navigate = useNavigate();
-
-  // LocalStorage se logged-in user ki details nikal lo
-  const userString = localStorage.getItem("user");
-  const user = userString ? JSON.parse(userString) : null;
+  const { user, logout } = useAuth(); // Context se direct user aur logout function nikal liya
 
   const handleLogout = () => {
-    // LocalStorage clear karke login page par bhej do
-    localStorage.clear();
+    logout(); // Context ka logout localStorage clear kar dega aur state reset kar dega
     navigate("/login");
   };
 
@@ -26,7 +23,7 @@ export default function Dashboard() {
           <p><strong>Status:</strong> <span style={{ color: "green" }}>{user.status}</span></p>
         </div>
       ) : (
-        <p>No user data found. Please login again.</p>
+        <p>Loading user data...</p>
       )}
 
       <button 
