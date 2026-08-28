@@ -1,4 +1,5 @@
 import express from "express";
+
 import {
   register,
   verifyPhone,
@@ -22,15 +23,54 @@ import {
 
 const router = express.Router();
 
-// Public Routes (with validation middleware)
-router.post("/register", validate(registerSchema), register);
-router.post("/verify-phone", validate(verifyPhoneSchema), verifyPhone);
-router.post("/resend-phone-otp", validate(resendPhoneOtpSchema), resendPhoneOtp);
-router.post("/login", validate(loginSchema), login);
-router.post("/refresh", validate(refreshSchema), refresh);
+// ============================================================
+// PUBLIC AUTH ROUTES
+// ============================================================
 
-// Protected Routes
-router.post("/logout", verifyToken, logout);
-router.get("/me", verifyToken, getMe);
+router.post(
+  "/register",
+  validate(registerSchema),
+  register
+);
+
+router.post(
+  "/verify-phone",
+  validate(verifyPhoneSchema),
+  verifyPhone
+);
+
+router.post(
+  "/resend-phone-otp",
+  validate(resendPhoneOtpSchema),
+  resendPhoneOtp
+);
+
+router.post(
+  "/login",
+  validate(loginSchema),
+  login
+);
+
+router.post(
+  "/refresh",
+  validate(refreshSchema),
+  refresh
+);
+
+// ============================================================
+// PROTECTED AUTH ROUTES
+// ============================================================
+
+router.post(
+  "/logout",
+  verifyToken,
+  logout
+);
+
+router.get(
+  "/me",
+  verifyToken,
+  getMe
+);
 
 export default router;

@@ -1,19 +1,25 @@
-import API from "./api";
+import api from "./api";
 
-// 1. Request OTP
-export const requestOtpApi = async (phone) => {
-  const response = await API.post("/auth/otp/request", { phone });
+// Register API call
+export const registerUser = async (data) => {
+  const response = await api.post("/auth/register", data);
+  return response.data; // Backend ka response data return kar rahe hain
+};
+
+// Verify OTP API call
+export const verifyOTP = async (data) => {
+  const response = await api.post("/auth/verify-phone", data);
   return response.data;
 };
 
-// 2. Verify OTP & Login
-export const verifyOtpApi = async (phone, otp) => {
-  const response = await API.post("/auth/otp/verify", { phone, otp });
+// Login API call
+export const loginUser = async (data) => {
+  const response = await api.post("/auth/login", data);
   return response.data;
 };
 
-// 3. Get Current User Profile (/me)
-export const getCurrentUserApi = async () => {
-  const response = await API.get("/auth/me");
+// Resend OTP API call
+export const resendOTP = async (data) => {
+  const response = await api.post("/auth/resend-phone-otp", data);
   return response.data;
 };

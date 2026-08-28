@@ -56,6 +56,11 @@ export const register = async ({ fullName, email, phone, password }, meta) => {
 
   // 3. Issue Phone Verification OTP
   const rawOtp = generateOtp();
+  
+  // 👉 YEH LINE ADD KARO BAACKEND TERMINAL KE LIYE:
+  console.log("\n========================================");
+  console.log(`🔑 DEV OTP FOR ${cleanPhone}: ${rawOtp}`);
+  console.log("========================================\n");
   const codeHash = await hashOtp(rawOtp);
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
