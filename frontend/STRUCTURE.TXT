@@ -1,0 +1,66 @@
+frontend/
+├── public/
+│   ├── favicon.ico
+│   └── logo.svg
+├── src/
+│   ├── api/
+│   │   ├── client.js
+│   │   ├── auth.js
+│   │   ├── onboarding.js
+│   │   └── business.js
+│   ├── assets/
+│   │   ├── images/
+│   │   └── fonts/
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Button/
+│   │   │   ├── Input/
+│   │   │   ├── Card/
+│   │   │   ├── Loader/
+│   │   │   ├── Toast/
+│   │   │   └── Layout/
+│   │   ├── auth/
+│   │   │   ├── Login.jsx
+│   │   │   ├── Register.jsx
+│   │   │   ├── VerifyPhone.jsx
+│   │   │   └── OTPInput.jsx
+│   │   ├── onboarding/
+│   │   │   ├── BusinessSetup.jsx
+│   │   │   └── OnboardingStepper.jsx
+│   │   └── dashboard/
+│   │       ├── Dashboard.jsx
+│   │       ├── Sidebar.jsx
+│   │       └── Header.jsx
+│   ├── context/
+│   │   ├── AuthContext.jsx
+│   │   └── BusinessContext.jsx
+│   ├── hooks/
+│   │   ├── useAuth.js
+│   │   ├── useOnboarding.js
+│   │   └── useToast.js
+│   ├── pages/
+│   │   ├── Auth/
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── RegisterPage.jsx
+│   │   │   └── VerifyPage.jsx
+│   │   ├── Onboarding/
+│   │   │   └── BusinessSetupPage.jsx
+│   │   └── Dashboard/
+│   │       └── DashboardPage.jsx
+│   ├── routes/
+│   │   ├── AppRoutes.jsx
+│   │   └── PrivateRoute.jsx
+│   ├── styles/
+│   │   ├── globals.css
+│   │   ├── theme.js
+│   │   └── variables.css
+│   ├── utils/
+│   │   ├── validators.js
+│   │   ├── formatters.js
+│   │   └── constants.js
+│   ├── App.jsx
+│   └── main.jsx
+├── index.html
+├── package.json
+├── vite.config.js
+└── .env

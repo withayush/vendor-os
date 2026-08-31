@@ -11,14 +11,22 @@ export const AuthProvider = ({ children }) => {
   const checkUserBusiness = async () => {
     try {
       const response = await getMyBusiness();
+      console.log("Business check response:", response);
       const businessData = response.data?.business || response.data;
       if (businessData && (businessData.id || businessData.business_name)) {
         setHasBusiness(true);
+        if (businessData.id) {
+          localStorage.setItem("businessId", businessData.id);
+        }
+        return true;
       } else {
         setHasBusiness(false);
+        return false;
       }
     } catch (err) {
+      console.error("Business check error:", err);
       setHasBusiness(false);
+      return false;
     }
   };
 
@@ -51,16 +59,23 @@ export const AuthProvider = ({ children }) => {
     setHasBusiness(false);
   };
 
+  // New function to manually refresh business status after onboarding
+  const refreshBusinessStatus = async () => {
+    const status = await checkUserBusiness();
+    return status;
+  };
+
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        isAuthenticated: !!user, 
-        hasBusiness, 
-        login, 
-        logout, 
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated: !!user,
+        hasBusiness,
+        login,
+        logout,
         loading,
-        refetchBusiness: checkUserBusiness 
+        refetchBusiness: checkUserBusiness,
+        refreshBusinessStatus, // Add this new function
       }}
     >
       {children}

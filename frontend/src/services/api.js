@@ -65,6 +65,13 @@ api.interceptors.response.use(
       }
     }
 
+    // If any other 401 Unauthorized occurs, it means session tokens are invalid or account is deleted.
+    // Clear storage and force redirect to /login.
+    if (error.response && error.response.status === 401) {
+      localStorage.clear();
+      window.location.href = "/login";
+    }
+
     return Promise.reject(error);
   }
 );

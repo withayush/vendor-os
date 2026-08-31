@@ -6,6 +6,10 @@ import Register from "./pages/Register";
 import VerifyOTP from "./pages/VerifyOTP";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import ProductsPage from "./pages/ProductsPage";
+import InventoryAuditPage from "./pages/InventoryAuditPage";
+import POSTerminalPage from "./pages/POSTerminalPage";
+import CustomersPage from "./pages/CustomersPage";
 import BusinessOnboarding from "./pages/business/BusinessOnboarding";
 
 export default function App() {
@@ -20,7 +24,7 @@ export default function App() {
           <Route path="/verify-otp" element={<VerifyOTP />} />
           <Route path="/login" element={<Login />} />
 
-          {/* Onboarding Route (Accessible only if business is NOT created yet) */}
+          {/* Onboarding Route */}
           <Route
             path="/business-onboarding"
             element={
@@ -30,7 +34,7 @@ export default function App() {
             }
           />
 
-          {/* Protected Dashboard Route (Accessible only if authenticated AND business is created) */}
+          {/* Protected Dashboard Route */}
           <Route
             path="/dashboard"
             element={
@@ -40,8 +44,58 @@ export default function App() {
             }
           />
 
+          {/* Protected Products Route */}
+          <Route
+            path="/products"
+            element={
+              <ProtectedRoute>
+                <ProductsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Inventory Audit Route */}
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute>
+                <InventoryAuditPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected POS Route */}
+          <Route
+            path="/pos"
+            element={
+              <ProtectedRoute>
+                <POSTerminalPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Protected Customers Route */}
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute>
+                <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Fallback 404 */}
-          <Route path="*" element={<h2>404 - Page Not Found</h2>} />
+          <Route path="*" element={
+            <div className="min-h-screen flex items-center justify-center bg-background">
+              <div className="text-center glass-card p-12 rounded-2xl max-w-md">
+                <h1 className="text-6xl font-bold gradient-text mb-4">404</h1>
+                <p className="text-muted-foreground">Page Not Found</p>
+                <a href="/login" className="mt-6 inline-block text-primary hover:text-primary/80">
+                  Go Back Home
+                </a>
+              </div>
+            </div>
+          } />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

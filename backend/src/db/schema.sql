@@ -2,11 +2,23 @@
 -- VendorOS - Clean Dev Reset & Extensions
 -- =========================================================
 
--- WARNING: Dev reset only. Wipes public schema clean.
+-- Dev reset: Wipes public schema clean to allow fresh initialization.
 DROP SCHEMA IF EXISTS public CASCADE;
 CREATE SCHEMA public;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- =========================================================
+-- AUTOMATED UPDATED_AT TRIGGER FUNCTION (Defined First)
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- =========================================================
 -- 1. ACCOUNTS (Primary Identity & Credentials)
@@ -168,6 +180,72 @@ CREATE TABLE auth_events (
 );
 
 -- =========================================================
+-- 9. CATEGORIES (Product Hierarchical Organization)
+-- =========================================================
+
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT categories_business_name_unique UNIQUE (business_id, name)
+);
+
+-- =========================================================
+-- 10. PRODUCTS (Base Product Attributes & Pricing)
+-- =========================================================
+
+CREATE TABLE products (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    name VARCHAR(150) NOT NULL,
+    sku VARCHAR(100),
+    barcode VARCHAR(100),
+    selling_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    unit VARCHAR(30) DEFAULT 'pcs',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT products_business_sku_unique UNIQUE (business_id, sku)
+);
+
+-- =========================================================
+-- 11. INVENTORY (Stock Quantities & Reorder Levels)
+-- =========================================================
+
+CREATE TABLE inventory (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL UNIQUE REFERENCES products(id) ON DELETE CASCADE,
+    available_stock NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    reorder_level NUMERIC(12, 2) NOT NULL DEFAULT 5.00,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- =========================================================
+-- 12. INVENTORY LEDGER (Audit Trail & Stock Transaction Logs)
+-- =========================================================
+
+CREATE TABLE inventory_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    qty_change NUMERIC(12, 2) NOT NULL, -- Positive for IN, Negative for OUT
+    type VARCHAR(30) NOT NULL,          -- IN, OUT, ADJUST
+    reference_id UUID,                  -- Optional link to Invoice ID or Purchase ID
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT inventory_ledger_type_check CHECK (
+        type IN ('IN', 'OUT', 'ADJUST')
+    )
+);
+
+-- =========================================================
 -- INDEXES
 -- =========================================================
 
@@ -185,18 +263,18 @@ CREATE INDEX idx_auth_attempts_account_id ON auth_attempts(account_id);
 CREATE INDEX idx_auth_attempts_ip_time ON auth_attempts(ip_address, created_at);
 CREATE INDEX idx_auth_events_account_time ON auth_events(account_id, created_at);
 CREATE INDEX idx_auth_events_type_time ON auth_events(event_type, created_at);
+CREATE INDEX idx_categories_business_id ON categories(business_id);
+CREATE INDEX idx_products_business_id ON products(business_id);
+CREATE INDEX idx_products_category_id ON products(category_id);
+CREATE INDEX idx_products_sku ON products(sku);
+CREATE INDEX idx_inventory_business_id ON inventory(business_id);
+CREATE INDEX idx_inventory_product_id ON inventory(product_id);
+CREATE INDEX idx_inventory_ledger_business_id ON inventory_ledger(business_id);
+CREATE INDEX idx_inventory_ledger_product_id ON inventory_ledger(product_id);
 
 -- =========================================================
--- AUTOMATED UPDATED_AT TRIGGER FUNCTION
+-- AUTOMATED UPDATED_AT TRIGGERS
 -- =========================================================
-
-CREATE OR REPLACE FUNCTION set_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_accounts_updated_at
 BEFORE UPDATE ON accounts
@@ -220,4 +298,206 @@ FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE TRIGGER trg_sessions_updated_at
 BEFORE UPDATE ON sessions
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_categories_updated_at
+BEFORE UPDATE ON categories
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_products_updated_at
+BEFORE UPDATE ON products
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_inventory_updated_at
+BEFORE UPDATE ON inventory
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- =========================================================
+-- 13. INVOICES / SALES TRANSACTIONS (Sales & Billing Core)
+-- =========================================================
+
+CREATE TABLE invoices (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    invoice_number VARCHAR(50) NOT NULL,
+    customer_name VARCHAR(100),
+    customer_phone VARCHAR(20),
+    subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    discount_total NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    tax_total NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    grand_total NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+    payment_mode VARCHAR(30) NOT NULL DEFAULT 'CASH',
+    payment_status VARCHAR(30) NOT NULL DEFAULT 'PAID',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT invoices_payment_status_check CHECK (
+        payment_status IN ('PAID', 'PENDING', 'CANCELLED')
+    )
+);
+
+CREATE TABLE invoice_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    product_id UUID NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
+    quantity NUMERIC(12, 2) NOT NULL,
+    sold_price NUMERIC(12, 2) NOT NULL, -- Snapshot of selling price at checkout
+    cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0.00, -- Snapshot of cost price at checkout
+    total_price NUMERIC(12, 2) NOT NULL
+);
+
+-- Indexes for performance and lookup
+CREATE INDEX idx_invoices_business_id ON invoices(business_id);
+CREATE INDEX idx_invoice_items_invoice_id ON invoice_items(invoice_id);
+CREATE INDEX idx_invoice_items_product_id ON invoice_items(product_id);
+
+-- Trigger for automated updated_at timestamp
+CREATE TRIGGER trg_invoices_updated_at
+BEFORE UPDATE ON invoices
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+-- =========================================================
+-- Database Trigger Function for Auto Inventory Deduction (Task T26)
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION auto_deduct_inventory_on_sale()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- 1. Insert Stock OUT entry into inventory_ledger
+    INSERT INTO inventory_ledger (business_id, product_id, qty_change, type, reference_id, notes)
+    SELECT 
+        i.business_id, 
+        NEW.product_id, 
+        -ABS(NEW.quantity), 
+        'OUT', 
+        NEW.invoice_id, 
+        CONCAT('Auto stock reduction for Invoice: ', i.invoice_number)
+    FROM invoices i
+    WHERE i.id = NEW.invoice_id;
+
+    -- 2. Update physical available_stock in inventory table
+    UPDATE inventory
+    SET available_stock = available_stock - NEW.quantity,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE product_id = NEW.product_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach trigger to invoice_items table
+DROP TRIGGER IF EXISTS trg_auto_deduct_inventory ON invoice_items;
+CREATE TRIGGER trg_auto_deduct_inventory
+AFTER INSERT ON invoice_items
+FOR EACH ROW EXECUTE FUNCTION auto_deduct_inventory_on_sale();
+
+-- =========================================================
+-- 15. PAYMENTS (Task T28 - Multi-mode Payment Tracking)
+-- =========================================================
+
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    invoice_id UUID NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    amount NUMERIC(12, 2) NOT NULL,
+    method VARCHAR(30) NOT NULL DEFAULT 'CASH', -- CASH, UPI, CARD, CREDIT
+    reference_id VARCHAR(100),                -- Transaction reference / UTR number
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT payments_method_check CHECK (
+        method IN ('CASH', 'UPI', 'CARD', 'CREDIT')
+    )
+);
+
+CREATE INDEX idx_payments_invoice_id ON payments(invoice_id);
+CREATE INDEX idx_payments_business_id ON payments(business_id);
+
+-- =========================================================
+-- 16. CUSTOMER LEDGER / UDHAAR CREDIT (Task T29 + T33)
+-- =========================================================
+
+-- Ledger Account Header: one record per customer per business (tracks running balance)
+CREATE TABLE customer_ledger (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL, -- T33: linked to customers table
+    customer_name VARCHAR(100) NOT NULL,
+    customer_phone VARCHAR(20) NOT NULL,
+    balance NUMERIC(12, 2) NOT NULL DEFAULT 0.00, -- Positive = customer owes (Udhaar outstanding)
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_customer_phone_per_business UNIQUE (business_id, customer_phone)
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- T33: CUSTOMER LEDGER ENTRIES — Double-Entry Transaction Log
+-- Every udhaar purchase creates a DEBIT entry (customer owes more).
+-- Every payment creates a CREDIT entry (customer owes less).
+-- balance_snapshot stores the running balance AFTER this entry is applied.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE customer_ledger_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_ledger_id UUID NOT NULL REFERENCES customer_ledger(id) ON DELETE CASCADE,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,   -- T33: direct FK to customers
+    sale_id UUID REFERENCES invoices(id) ON DELETE SET NULL,        -- T33: linked sale/invoice
+    credit_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,             -- T33: amount paid in (reduces balance)
+    debit_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,              -- T33: amount owed (increases balance)
+    balance_snapshot NUMERIC(12, 2) NOT NULL,                       -- T33: running balance AFTER this entry
+    entry_type VARCHAR(30) NOT NULL,                                 -- CREDIT_SALE | PAYMENT_RECEIVED | ADJUSTMENT
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Double-entry integrity: exactly one of credit/debit must be non-zero per entry
+    CONSTRAINT chk_ledger_entry_direction CHECK (
+        (credit_amount > 0 AND debit_amount = 0) OR
+        (debit_amount > 0 AND credit_amount = 0)
+    ),
+    CONSTRAINT chk_ledger_entry_type CHECK (
+        entry_type IN ('CREDIT_SALE', 'PAYMENT_RECEIVED', 'ADJUSTMENT')
+    )
+);
+
+-- Legacy transactions table (kept for backward compatibility with existing sales data)
+CREATE TABLE customer_ledger_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    customer_ledger_id UUID NOT NULL REFERENCES customer_ledger(id) ON DELETE CASCADE,
+    invoice_id UUID REFERENCES invoices(id) ON DELETE SET NULL,
+    amount NUMERIC(12, 2) NOT NULL,
+    type VARCHAR(30) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_customer_ledger_business ON customer_ledger(business_id);
+CREATE INDEX idx_customer_ledger_customer_id ON customer_ledger(customer_id);
+CREATE INDEX idx_ledger_entries_ledger ON customer_ledger_entries(customer_ledger_id);
+CREATE INDEX idx_ledger_entries_sale ON customer_ledger_entries(sale_id);
+CREATE INDEX idx_ledger_entries_customer ON customer_ledger_entries(customer_id);
+CREATE INDEX idx_ledger_tx_customer ON customer_ledger_transactions(customer_ledger_id);
+
+-- Trigger: auto-update customer_ledger.updated_at on balance change
+CREATE TRIGGER trg_customer_ledger_updated_at
+BEFORE UPDATE ON customer_ledger
+FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+
+-- =========================================================
+-- 17. CUSTOMERS (Phase 5 - Task T31: Customer Schema DB Model)
+-- =========================================================
+
+CREATE TABLE customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id UUID NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(255),
+    address TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT unique_business_customer_phone UNIQUE (business_id, phone)
+);
+
+CREATE INDEX idx_customers_business_id ON customers(business_id);
+CREATE INDEX idx_customers_phone ON customers(phone);
+
+-- Trigger for automated updated_at timestamp
+CREATE TRIGGER trg_customers_updated_at
+BEFORE UPDATE ON customers
 FOR EACH ROW EXECUTE FUNCTION set_updated_at();

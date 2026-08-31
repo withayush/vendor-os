@@ -1,40 +1,62 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-// 1. Sirf logged-in users ke liye (Jaise Dashboard)
 export function ProtectedRoute({ children }) {
   const { isAuthenticated, hasBusiness, loading } = useAuth();
 
+  // Debug logs
+  console.log("ProtectedRoute - isAuthenticated:", isAuthenticated);
+  console.log("ProtectedRoute - hasBusiness:", hasBusiness);
+  console.log("ProtectedRoute - loading:", loading);
+
   if (loading) {
-    return <div style={{ textAlign: "center", marginTop: "100px" }}>Loading security context...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+          <p className="text-muted-foreground mt-4">Loading security context...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Agar user logged in hai lekin business onboarding complete nahi hai, toh use wahan bhej do
   if (!hasBusiness) {
+    console.log("ProtectedRoute - Redirecting to onboarding because hasBusiness is false");
     return <Navigate to="/business-onboarding" replace />;
   }
 
   return children;
 }
 
-// 2. Sirf Onboarding ke liye route guard
 export function OnboardingRoute({ children }) {
   const { isAuthenticated, hasBusiness, loading } = useAuth();
 
+  // Debug logs
+  console.log("OnboardingRoute - isAuthenticated:", isAuthenticated);
+  console.log("OnboardingRoute - hasBusiness:", hasBusiness);
+  console.log("OnboardingRoute - loading:", loading);
+
   if (loading) {
-    return <div style={{ textAlign: "center", marginTop: "100px" }}>Loading security context...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+          <p className="text-muted-foreground mt-4">Loading security context...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
-  // Agar business pehle se bani hui hai, toh onboarding bar-bar kholne ki zaroorat nahi, seedha dashboard bhejo
   if (hasBusiness) {
+    console.log("OnboardingRoute - Redirecting to dashboard because hasBusiness is true");
     return <Navigate to="/dashboard" replace />;
   }
 

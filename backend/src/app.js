@@ -5,7 +5,9 @@ import authRoutes from "./routes/auth.routes.js";
 import businessRoutes from "./routes/business.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import vendorRoutes from "./routes/vendor.routes.js";
-
+import inventoryRoutes from "./routes/inventory.routes.js";
+import salesRoutes from "./routes/sales.routes.js";
+import customerRoutes from "./routes/customer.routes.js";
 const app = express();
 
 // =====================================================
@@ -48,6 +50,12 @@ app.use("/api/v1/products", productRoutes);
 
 app.use("/api/v1/vendors", vendorRoutes);
 
+app.use("/api/v1/inventory", inventoryRoutes);
+
+app.use("/api/v1/sales", salesRoutes);
+
+app.use("/api/v1/customers", customerRoutes);
+
 // =====================================================
 // 404 HANDLER
 // =====================================================
@@ -69,10 +77,10 @@ app.use((err, req, res, next) => {
   console.error("Message:", err.message);
   console.error("Stack:", err.stack);
 
-  res.status(err.status || 500).json({
+  res.status(err.status || err.statusCode || 500).json({
     success: false,
     message:
-      process.env.NODE_ENV === "development"
+      process.env.NODE_ENV === "development" || err.status || err.statusCode
         ? err.message
         : "Internal server error.",
   });

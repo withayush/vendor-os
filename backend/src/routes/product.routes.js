@@ -1,12 +1,36 @@
 import express from "express";
-import { createProduct, getProducts } from "../controllers/product.controller.js";
+import { createProduct, getProducts, updateProduct, deleteProduct } from "../controllers/product.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { verifyBusinessAccess } from "../middlewares/business.middleware.js";
+import { validate } from "../middlewares/validate.middleware.js";
+import { createProductSchema, updateProductSchema } from "../validations/product.validation.js";
 
 const router = express.Router();
 
-// Owner, Manager, or Staff can add and view products for their business
-router.post("/", verifyToken, verifyBusinessAccess(["OWNER", "MANAGER", "STAFF"]), createProduct);
+router.post(
+  "/", 
+  verifyToken, 
+  verifyBusinessAccess(["OWNER", "MANAGER", "STAFF"]), 
+  validate(createProductSchema),
+  createProduct
+);
 router.get("/", verifyToken, verifyBusinessAccess(), getProducts);
+
+// T10: Update Product API Endpoint
+router.put(
+  "/:id",
+  verifyToken,
+  verifyBusinessAccess(["OWNER", "MANAGER"]),
+  validate(updateProductSchema),
+  updateProduct
+);
+
+// T11: Archive / Soft-Delete Product API Endpoint
+router.delete(
+  "/:id",
+  verifyToken,
+  verifyBusinessAccess(["OWNER", "MANAGER"]),
+  deleteProduct
+);
 
 export default router;

@@ -1,52 +1,72 @@
-import { query } from "../db/db.js";
+import * as productService from "../services/product.service.js";
 
-// Add Product API
-export const createProduct = async (req, res) => {
+// Add Product API (Task T9)
+export const createProduct = async (req, res, next) => {
   try {
-    const businessId = req.headers["x-business-id"];
-    const { name, description, sku, price, cost_price, stock_quantity, unit } = req.body;
-
-    if (!name || price === undefined) {
-      return res.status(400).json({ success: false, message: "Product name and price are required." });
-    }
-
-    const result = await query(
-      `INSERT INTO products (business_id, name, description, sku, price, cost_price, stock_quantity, unit) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [businessId, name, description, sku, price, cost_price || 0, stock_quantity || 0, unit || "pcs"]
-    );
+    const businessId = req.businessId;
+    const product = await productService.createProduct(businessId, req.body);
 
     return res.status(201).json({
       success: true,
       message: "Product added successfully.",
-      data: {
-        product: result.rows[0]
-      }
+      data: { product }
     });
   } catch (error) {
     console.error("Error in createProduct:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    next(error);
   }
 };
 
-// Get All Products for the Business API
-export const getProducts = async (req, res) => {
+// Get Products with Search & Pagination (Task T14)
+export const getProducts = async (req, res, next) => {
   try {
-    const businessId = req.headers["x-business-id"];
-
-    const result = await query(
-      `SELECT * FROM products WHERE business_id = $1 ORDER BY created_at DESC`,
-      [businessId]
-    );
+    const businessId = req.businessId;
+    const result = await productService.listProducts(businessId, req.query);
 
     return res.status(200).json({
       success: true,
-      data: {
-        products: result.rows
-      }
+      data: result
     });
   } catch (error) {
     console.error("Error in getProducts:", error);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    next(error);
+  }
+};
+
+// Update Product API (Task T10)
+export const updateProduct = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { id } = req.params;
+
+    const product = await productService.editProduct(businessId, id, req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "Product updated successfully.",
+      data: { product }
+    });
+  } catch (error) {
+    console.error("Error in updateProduct:", error);
+    next(error);
+  }
+};
+
+// Archive / Soft-Delete Product API (Task T11)
+export const deleteProduct = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { id } = req.params;
+
+    const product = await productService.archiveProduct(businessId, id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Product archived successfully (soft-deleted to preserve invoice history).",
+      data: { product }
+    });
+  } catch (error) {
+    console.error("Error in deleteProduct:", error);
+    next(error);
   }
 };
