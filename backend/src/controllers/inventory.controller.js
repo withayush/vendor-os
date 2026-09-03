@@ -68,23 +68,38 @@ export const adjustStock = async (req, res, next) => {
   }
 };
 
-// Get Inventory Ledger Audit Logs (Task T21)
+// Get Inventory Ledger Audit Logs (Task T16 & T21)
 export const getLedgerLogs = async (req, res, next) => {
   try {
     const businessId = req.businessId;
-    const { productId } = req.query;
-
-    const logs = await inventoryService.listLedgerLogs(businessId, productId);
+    const logs = await inventoryService.listLedgerLogs(businessId, req.query);
 
     return res.status(200).json({
       success: true,
-      data: { logs }
+      data: { logs, count: logs.length }
     });
   } catch (error) {
     console.error("Error in getLedgerLogs:", error);
     next(error);
   }
 };
+
+// T16: Ledger movement flow summary (total IN/OUT/ADJUST)
+export const getLedgerSummary = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const summary = await inventoryService.getLedgerSummary(businessId);
+
+    return res.status(200).json({
+      success: true,
+      data: summary
+    });
+  } catch (error) {
+    console.error("Error in getLedgerSummary:", error);
+    next(error);
+  }
+};
+
 
 // Get Low Stock Alerts (Task T22)
 export const getLowStockAlerts = async (req, res, next) => {
@@ -101,3 +116,77 @@ export const getLowStockAlerts = async (req, res, next) => {
     next(error);
   }
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T15: Inventory Store State Model Controllers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// T15: Get master inventory store state (all products with physical stock & reorder level)
+export const getInventoryStoreState = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const result = await inventoryService.getInventoryStoreState(businessId, req.query);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in getInventoryStoreState:", error);
+    next(error);
+  }
+};
+
+// T15: Get store state for a specific product
+export const getProductStoreState = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { productId } = req.params;
+
+    const result = await inventoryService.getProductStoreState(businessId, productId);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in getProductStoreState:", error);
+    next(error);
+  }
+};
+
+// T15: Update product reorder level and parameters
+export const updateInventoryConfig = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { productId } = req.params;
+
+    const result = await inventoryService.updateInventoryConfig(businessId, productId, req.body);
+
+    return res.status(200).json({
+      success: true,
+      message: "Inventory configuration updated successfully.",
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in updateInventoryConfig:", error);
+    next(error);
+  }
+};
+
+// T15: Get overall inventory valuation & health metrics
+export const getInventoryValuation = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const result = await inventoryService.getInventoryValuation(businessId);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in getInventoryValuation:", error);
+    next(error);
+  }
+};
+

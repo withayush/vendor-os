@@ -8,7 +8,9 @@ import {
   getBusinessOutstandingSummary,
   getBusinessOutstandingTotals,
   recordCustomerPayment,
-  getCustomerLedgerHistory
+  getCustomerLedgerHistory,
+  getCustomerPaymentHistory,
+  getCustomerCRMProfile
 } from "../controllers/customer.controller.js";
 import { verifyToken } from "../middlewares/auth.middleware.js";
 import { verifyBusinessAccess } from "../middlewares/business.middleware.js";
@@ -57,7 +59,13 @@ router.post(
   recordCustomerPayment
 );
 
-// T35: Fetch Customer Ledger & Payment History
+// T35: Fetch Customer Full Ledger & Payment History
 router.get("/:customerId/ledger", verifyToken, verifyBusinessAccess(), getCustomerLedgerHistory);
+
+// T35: Dedicated Payment Settlements endpoint (PAYMENT_RECEIVED only, with ?from=&to=&limit=)
+router.get("/:customerId/payments", verifyToken, verifyBusinessAccess(), getCustomerPaymentHistory);
+
+// T36: CRM Profile — sales metrics, debt aging, top products, monthly trend
+router.get("/:customerId/profile", verifyToken, verifyBusinessAccess(), getCustomerCRMProfile);
 
 export default router;

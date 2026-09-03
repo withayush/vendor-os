@@ -10,6 +10,7 @@ import ProductsPage from "./pages/ProductsPage";
 import InventoryAuditPage from "./pages/InventoryAuditPage";
 import POSTerminalPage from "./pages/POSTerminalPage";
 import CustomersPage from "./pages/CustomersPage";
+import CustomerCRMPage from "./pages/CustomerCRMPage";
 import BusinessOnboarding from "./pages/business/BusinessOnboarding";
 
 export default function App() {
@@ -80,6 +81,16 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CustomersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* T36: Customer CRM Profile route */}
+          <Route
+            path="/customers/:customerId/profile"
+            element={
+              <ProtectedRoute>
+                <CustomerCRMPage />
               </ProtectedRoute>
             }
           />

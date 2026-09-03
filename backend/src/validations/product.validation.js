@@ -9,6 +9,7 @@ export const createProductSchema = z.object({
     costPrice: z.number().optional().nullable(),
     unit: z.string().optional().nullable(),
     categoryId: z.string().optional().nullable(),
+    categoryName: z.string().optional().nullable(),
   }),
 });
 
@@ -21,6 +22,7 @@ export const updateProductSchema = z.object({
     costPrice: z.number().optional().nullable(),
     unit: z.string().optional().nullable(),
     categoryId: z.string().optional().nullable(),
+    categoryName: z.string().optional().nullable(),
     isActive: z.boolean().optional(),
   }),
 });

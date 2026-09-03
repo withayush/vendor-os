@@ -237,13 +237,139 @@ export const processRepayment = async (businessId, customerId, body) => {
   }
 };
 
-// 6. Get Ledger History logs (T35)
+// T35: Full ledger history (all entry types) with payment summary included
 export const getLedgerHistory = async (businessId, customerId) => {
   const customer = await customerRepo.findCustomerById(businessId, customerId);
   if (!customer) {
     throw { statusCode: 404, message: "Customer not found." };
   }
 
-  const transactions = await customerRepo.findLedgerTransactions(businessId, customer.phone);
-  return transactions;
+  const [transactions, summary] = await Promise.all([
+    customerRepo.findLedgerTransactions(businessId, customer.phone),
+    customerRepo.findPaymentSummary(businessId, customer.phone),
+  ]);
+
+  return {
+    transactions,
+    payment_summary: {
+      total_payments: parseInt(summary.total_payments ?? 0),
+      total_paid: parseFloat(summary.total_paid ?? 0),
+      avg_payment: parseFloat(summary.avg_payment ?? 0),
+      largest_payment: parseFloat(summary.largest_payment ?? 0),
+      first_payment_at: summary.first_payment_at || null,
+      last_payment_at: summary.last_payment_at || null,
+    },
+  };
 };
+
+// T35: Dedicated Payment Settlement History endpoint
+// Returns ONLY PAYMENT_RECEIVED entries with full repayment metadata
+export const getPaymentHistory = async (businessId, customerId, filters = {}) => {
+  const customer = await customerRepo.findCustomerById(businessId, customerId);
+  if (!customer) {
+    throw { statusCode: 404, message: "Customer not found." };
+  }
+
+  const [payments, summary] = await Promise.all([
+    customerRepo.findPaymentHistory(businessId, customer.phone, filters),
+    customerRepo.findPaymentSummary(businessId, customer.phone),
+  ]);
+
+  return {
+    customer: {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+    },
+    payments: payments.map(p => ({
+      id: p.id,
+      amount_paid: parseFloat(p.amount_paid ?? 0),
+      balance_before: parseFloat(p.balance_before ?? 0),
+      balance_after: parseFloat(p.balance_after ?? 0),
+      payment_mode: p.payment_mode || "CASH",
+      notes: p.notes || null,
+      created_at: p.created_at,
+    })),
+    summary: {
+      total_payments: parseInt(summary.total_payments ?? 0),
+      total_paid: parseFloat(summary.total_paid ?? 0),
+      avg_payment: parseFloat(summary.avg_payment ?? 0),
+      largest_payment: parseFloat(summary.largest_payment ?? 0),
+      first_payment_at: summary.first_payment_at || null,
+      last_payment_at: summary.last_payment_at || null,
+    },
+  };
+};
+
+// T36: Full CRM Profile — aggregates all profiling data in a single call
+export const getCustomerCRMProfile = async (businessId, customerId) => {
+  const customer = await customerRepo.findCustomerById(businessId, customerId);
+  if (!customer) {
+    throw { statusCode: 404, message: "Customer not found." };
+  }
+
+  // Fetch all CRM data in parallel
+  const [salesProfile, debtAging, topProducts, monthlySpend, paymentSummary] =
+    await Promise.all([
+      customerRepo.findCustomerSalesProfile(businessId, customer.phone),
+      customerRepo.findCustomerDebtAging(businessId, customer.phone),
+      customerRepo.findCustomerTopProducts(businessId, customer.phone),
+      customerRepo.findCustomerMonthlySpend(businessId, customer.phone),
+      customerRepo.findPaymentSummary(businessId, customer.phone),
+    ]);
+
+  return {
+    customer: {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      customer_since: customer.created_at,
+    },
+    // T36: Sales profile metrics
+    sales: {
+      total_visits: parseInt(salesProfile.total_visits ?? 0),
+      total_spend: parseFloat(salesProfile.total_spend ?? 0),
+      avg_spend: parseFloat(salesProfile.avg_spend ?? 0),
+      largest_purchase: parseFloat(salesProfile.largest_purchase ?? 0),
+      first_visit_at: salesProfile.first_visit_at || null,
+      last_visit_at: salesProfile.last_visit_at || null,
+      days_since_last_visit: parseFloat(salesProfile.days_since_last_visit ?? 0),
+      paid_visits: parseInt(salesProfile.paid_visits ?? 0),
+      credit_visits: parseInt(salesProfile.credit_visits ?? 0),
+      preferred_payment_mode: salesProfile.preferred_payment_mode || "CASH",
+    },
+    // T36: Debt aging buckets
+    debt_aging: {
+      aging_0_30: parseFloat(debtAging.aging_0_30 ?? 0),
+      aging_31_60: parseFloat(debtAging.aging_31_60 ?? 0),
+      aging_61_90: parseFloat(debtAging.aging_61_90 ?? 0),
+      aging_90_plus: parseFloat(debtAging.aging_90_plus ?? 0),
+      total_credit_taken: parseFloat(debtAging.total_credit_taken ?? 0),
+    },
+    // T36: Top purchased products
+    top_products: topProducts.map(p => ({
+      product_name: p.product_name,
+      purchase_count: parseInt(p.purchase_count),
+      total_qty: parseFloat(p.total_qty),
+      total_revenue: parseFloat(p.total_revenue),
+    })),
+    // T36: Monthly spend trend (12 months)
+    monthly_trend: monthlySpend.map(m => ({
+      month_label: m.month_label,
+      visit_count: parseInt(m.visit_count),
+      total_spend: parseFloat(m.total_spend),
+    })),
+    // Payment track record
+    payment_track: {
+      total_payments: parseInt(paymentSummary.total_payments ?? 0),
+      total_paid: parseFloat(paymentSummary.total_paid ?? 0),
+      avg_payment: parseFloat(paymentSummary.avg_payment ?? 0),
+      first_payment_at: paymentSummary.first_payment_at || null,
+      last_payment_at: paymentSummary.last_payment_at || null,
+    },
+  };
+};
+

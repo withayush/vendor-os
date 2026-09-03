@@ -52,8 +52,25 @@ export const recordCustomerPayment = async (customerId, data) => {
   return res.data;
 };
 
-// T35: Get ledger / payment history for a customer
+// T35: Get ledger / full payment history for a customer
 export const getCustomerLedger = async (customerId) => {
   const res = await api.get(`/customers/${customerId}/ledger`, getBusinessHeader());
+  return res.data;
+};
+
+// T35: Dedicated payment settlements only (PAYMENT_RECEIVED entries, supports ?from=&to=&limit=)
+export const getCustomerPaymentHistory = async (customerId, filters = {}) => {
+  const params = new URLSearchParams();
+  if (filters.from) params.append("from", filters.from);
+  if (filters.to) params.append("to", filters.to);
+  if (filters.limit) params.append("limit", filters.limit);
+  const qs = params.toString();
+  const res = await api.get(`/customers/${customerId}/payments${qs ? `?${qs}` : ""}`, getBusinessHeader());
+  return res.data;
+};
+
+// T36: Full CRM Profiling — sales metrics, debt aging, top products, monthly trend
+export const getCustomerCRMProfile = async (customerId) => {
+  const res = await api.get(`/customers/${customerId}/profile`, getBusinessHeader());
   return res.data;
 };

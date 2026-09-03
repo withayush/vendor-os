@@ -35,3 +35,13 @@ export const adjustStockSchema = z.object({
     notes: z.string().max(500).optional().nullable(),
   }),
 });
+
+// T15: Inventory Configuration Schema (Reorder Level)
+export const updateInventoryConfigSchema = z.object({
+  body: z.object({
+    reorderLevel: z
+      .number({ required_error: "reorderLevel is required" })
+      .nonnegative("Reorder level cannot be negative"),
+  }),
+});
+

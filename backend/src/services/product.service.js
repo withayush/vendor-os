@@ -9,9 +9,16 @@ export const createProduct = async (businessId, body) => {
     }
   }
 
+  // T14: Resolve categoryName if categoryId not explicitly provided
+  if (body.categoryName && !body.categoryId) {
+    const category = await productRepo.findOrCreateCategory(businessId, body.categoryName);
+    if (category) body.categoryId = category.id;
+  }
+
   const product = await productRepo.createProductRecord(businessId, body);
   return product;
 };
+
 
 export const listProducts = async (businessId, queryParams) => {
   const search = queryParams.search || "";
@@ -19,8 +26,18 @@ export const listProducts = async (businessId, queryParams) => {
   const page = parseInt(queryParams.page) || 1;
   const offset = (page - 1) * limit;
 
-  const totalItems = await productRepo.countProducts(businessId, search);
-  const products = await productRepo.findProductsList(businessId, search, limit, offset);
+  // isArchived: "true" → archived only, "false" → active only, undefined → all
+  let isArchived;
+  if (queryParams.isArchived === "true") isArchived = true;
+  else if (queryParams.isArchived === "false") isArchived = false;
+
+  // T14: category filter + sort support
+  const categoryId = queryParams.categoryId || null;
+  const sortBy = queryParams.sortBy || "created";
+  const sortDir = queryParams.sortDir === "ASC" ? "ASC" : "DESC";
+
+  const totalItems = await productRepo.countProducts(businessId, search, isArchived, categoryId);
+  const products = await productRepo.findProductsList(businessId, search, limit, offset, isArchived, categoryId, sortBy, sortDir);
 
   return {
     products,
@@ -48,9 +65,16 @@ export const editProduct = async (businessId, productId, body) => {
     }
   }
 
+  // T14: Resolve categoryName if categoryId not explicitly provided
+  if (body.categoryName && !body.categoryId) {
+    const category = await productRepo.findOrCreateCategory(businessId, body.categoryName);
+    if (category) body.categoryId = category.id;
+  }
+
   const product = await productRepo.updateProductRecord(businessId, productId, body);
   return product;
 };
+
 
 export const archiveProduct = async (businessId, productId) => {
   // Check if product exists and belongs to this business
@@ -62,3 +86,26 @@ export const archiveProduct = async (businessId, productId) => {
   const product = await productRepo.archiveProductRecord(businessId, productId);
   return product;
 };
+
+// T14: Instant search — typeahead / POS fast lookup
+// Returns minimal payload: id, name, sku, barcode, price, unit, stock, category
+export const instantSearchProducts = async (businessId, q, limit = 10) => {
+  const results = await productRepo.findProductsInstantSearch(businessId, q, limit);
+  return results.map(p => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku || null,
+    barcode: p.barcode || null,
+    selling_price: parseFloat(p.selling_price),
+    cost_price: parseFloat(p.cost_price),
+    unit: p.unit || "pcs",
+    category_name: p.category_name || null,
+    available_stock: parseFloat(p.available_stock || 0),
+    margin_pct: parseFloat(p.margin_pct || 0),
+  }));
+};
+
+// T14: Get all categories for filter dropdown
+export const getCategories = async (businessId) => {
+  return productRepo.findCategoriesList(businessId);
+};

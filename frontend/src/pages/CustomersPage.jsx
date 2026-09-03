@@ -38,6 +38,7 @@ import {
   getBusinessOutstandingTotals,
   recordCustomerPayment,
   getCustomerLedger,
+  getCustomerPaymentHistory,
 } from "../services/customer.api";
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
@@ -180,6 +181,10 @@ export default function CustomersPage() {
   const [loadingTotals, setLoadingTotals] = useState(false);
   const [showOutstandingPanel, setShowOutstandingPanel] = useState(false);
 
+  // T35: Payment History state
+  const [paymentSummary, setPaymentSummary] = useState(null);
+  const [ledgerTab, setLedgerTab] = useState("ALL"); // "ALL" | "PAYMENTS"
+
   // ── Fetch customers ──
   const fetchCustomers = useCallback(async () => {
     try {
@@ -221,16 +226,21 @@ export default function CustomersPage() {
   const fetchDetail = async (customer) => {
     setSelectedCustomer(customer);
     setLoadingDetail(true);
+    setLedgerTab("ALL");
     try {
       const [outRes, ledRes] = await Promise.all([
         getCustomerOutstanding(customer.id),
         getCustomerLedger(customer.id),
       ]);
       setOutstanding(outRes.data);
-      setLedger(ledRes.data?.transactions || ledRes.data || []);
+      // T35: ledger endpoint now returns { transactions, payment_summary }
+      const ledgerData = ledRes.data;
+      setLedger(ledgerData?.transactions || ledgerData || []);
+      setPaymentSummary(ledgerData?.payment_summary || null);
     } catch {
       setOutstanding(null);
       setLedger([]);
+      setPaymentSummary(null);
     } finally {
       setLoadingDetail(false);
     }
@@ -360,12 +370,21 @@ export default function CustomersPage() {
                 )}
               </div>
             </div>
-            <button
-              onClick={openEdit}
-              className="p-2.5 rounded-xl border border-border hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
-            >
-              <Edit3 className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate(`/customers/${selectedCustomer.id}/profile`)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground text-xs font-medium"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                CRM Profile
+              </button>
+              <button
+                onClick={openEdit}
+                className="p-2.5 rounded-xl border border-border hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </motion.div>
 
@@ -422,86 +441,162 @@ export default function CustomersPage() {
           )}
         </motion.div>
 
-        {/* Ledger / Payment History */}
+        {/* T35: Payment & Credit History Panel */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-card border border-border rounded-2xl p-6"
+          className="bg-card border border-border rounded-2xl overflow-hidden"
         >
-          <div className="flex items-center gap-2 mb-4">
-            <ReceiptText className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-semibold text-foreground text-sm">Payment & Credit History</h2>
+          {/* Panel Header */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-3">
+            <div className="flex items-center gap-2">
+              <ReceiptText className="w-4 h-4 text-muted-foreground" />
+              <h2 className="font-semibold text-foreground text-sm">Payment History</h2>
+            </div>
+            {/* Tab toggle */}
+            <div className="flex bg-secondary border border-border rounded-lg p-0.5 text-xs">
+              {["ALL", "PAYMENTS"].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setLedgerTab(tab)}
+                  className={`px-3 py-1 rounded-md transition-all ${
+                    ledgerTab === tab
+                      ? "bg-card text-foreground font-medium shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tab === "ALL" ? "All Entries" : "Payments Only"}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {loadingDetail ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : ledger.length === 0 ? (
-            <div className="text-center py-10">
-              <Clock className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground text-sm">No transactions yet</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {ledger.map((tx, i) => {
-                // T33 double-entry: use credit_amount / debit_amount / balance_snapshot
-                const isPayment = tx.type === "PAYMENT_RECEIVED" || (tx.credit_amount > 0 && tx.debit_amount === 0);
-                const isSale = tx.type === "CREDIT_SALE" || (tx.debit_amount > 0 && tx.credit_amount === 0);
-                const displayAmount = isPayment
-                  ? parseFloat(tx.credit_amount || 0)
-                  : parseFloat(tx.debit_amount || Math.abs(tx.amount || 0));
-                const balanceAfter = tx.balance_snapshot ?? tx.current_balance;
-
-                return (
-                  <div key={tx.id || tx.tx_id || i} className="flex items-center gap-3 p-3 rounded-xl bg-secondary/30 border border-border/50 hover:border-border transition-colors">
-                    {/* Direction Icon */}
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isPayment
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : "bg-red-500/10 text-red-400"
-                      }`}
-                    >
-                      {isPayment
-                        ? <ArrowDownLeft className="w-4 h-4" />
-                        : <ArrowUpRight className="w-4 h-4" />}
-                    </div>
-
-                    {/* Description + Date */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">
-                        {tx.notes || (isPayment ? "Payment received" : "Credit sale (Udhaar)")}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-[10px] text-muted-foreground">{fmtDate(tx.created_at)}</p>
-                        {tx.sale_id && (
-                          <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground/60 bg-secondary border border-border/40 px-1.5 py-0.5 rounded">
-                            <ShoppingBag className="w-2.5 h-2.5" /> Invoice
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Amount + Balance Snapshot */}
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-bold ${
-                        isPayment ? "text-emerald-400" : "text-red-400"
-                      }`}>
-                        {isPayment ? "-" : "+"}{fmt(displayAmount)}
-                      </p>
-                      {balanceAfter !== undefined && balanceAfter !== null && (
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          Bal: {fmt(balanceAfter)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+          {/* T35: Payment Summary Stats Row */}
+          {paymentSummary && paymentSummary.total_payments > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 px-6 pb-4">
+              {[
+                { label: "Payments Made", value: paymentSummary.total_payments, color: "text-emerald-400" },
+                { label: "Total Paid", value: fmt(paymentSummary.total_paid), color: "text-emerald-400" },
+                { label: "Avg Payment", value: fmt(paymentSummary.avg_payment), color: "text-primary" },
+                { label: "Largest", value: fmt(paymentSummary.largest_payment), color: "text-blue-400" },
+              ].map((s, i) => (
+                <div key={i} className="bg-secondary/40 border border-border/40 rounded-xl px-3 py-2">
+                  <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                  <p className={`text-sm font-bold ${s.color} mt-0.5`}>{s.value}</p>
+                </div>
+              ))}
             </div>
           )}
+
+          <div className="px-6 pb-6">
+            {loadingDetail ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : ledger.length === 0 ? (
+              <div className="text-center py-10">
+                <Clock className="w-8 h-8 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-muted-foreground text-sm">No transactions yet</p>
+              </div>
+            ) : (() => {
+              // T35: filter by active tab
+              const filtered = ledgerTab === "PAYMENTS"
+                ? ledger.filter(tx => {
+                    const isPayment = tx.type === "PAYMENT_RECEIVED" || (parseFloat(tx.credit_amount) > 0 && parseFloat(tx.debit_amount) === 0);
+                    return isPayment;
+                  })
+                : ledger;
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="text-center py-8">
+                    <CheckCircle2 className="w-7 h-7 mx-auto text-muted-foreground/30 mb-2" />
+                    <p className="text-muted-foreground text-sm">No payment settlements recorded yet</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="space-y-2">
+                  {filtered.map((tx, i) => {
+                    const isPayment = tx.type === "PAYMENT_RECEIVED" || (parseFloat(tx.credit_amount) > 0 && parseFloat(tx.debit_amount) === 0);
+                    const displayAmount = isPayment
+                      ? parseFloat(tx.credit_amount || tx.amount_paid || 0)
+                      : parseFloat(tx.debit_amount || 0);
+                    const balanceAfter = tx.balance_snapshot ?? tx.balance_after ?? tx.current_balance;
+                    const balanceBefore = tx.balance_before ?? null;
+
+                    // Payment mode badge
+                    const mode = tx.payment_mode || (
+                      tx.notes?.toLowerCase().includes("upi") ? "UPI" :
+                      tx.notes?.toLowerCase().includes("card") ? "CARD" :
+                      tx.notes?.toLowerCase().includes("bank") || tx.notes?.toLowerCase().includes("neft") ? "BANK" : null
+                    );
+                    const modeBadge = {
+                      CASH: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+                      UPI: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+                      CARD: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                      BANK: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+                    };
+
+                    return (
+                      <div key={tx.id || i} className="flex items-start gap-3 p-3 rounded-xl bg-secondary/30 border border-border/50 hover:border-border transition-colors">
+                        {/* Icon */}
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                          isPayment ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                        }`}>
+                          {isPayment ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                        </div>
+
+                        {/* Description + Date + Mode */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-xs font-medium text-foreground truncate">
+                              {tx.notes || (isPayment ? "Payment received" : "Credit sale (Udhaar)")}
+                            </p>
+                            {/* Payment mode badge */}
+                            {isPayment && mode && (
+                              <span className={`text-[9px] font-semibold border px-1.5 py-0.5 rounded ${modeBadge[mode] || "bg-secondary text-muted-foreground border-border"}` }>
+                                {mode}
+                              </span>
+                            )}
+                            {/* Invoice badge */}
+                            {tx.sale_id && (
+                              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground/60 bg-secondary border border-border/40 px-1.5 py-0.5 rounded">
+                                <ShoppingBag className="w-2.5 h-2.5" /> Invoice
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            <p className="text-[10px] text-muted-foreground">{fmtDate(tx.created_at)}</p>
+                            {/* T35: Balance before → after for payment entries */}
+                            {isPayment && balanceBefore !== null && balanceAfter !== null && (
+                              <p className="text-[10px] text-muted-foreground/60">
+                                {fmt(balanceBefore)} → {fmt(balanceAfter)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Amount */}
+                        <div className="text-right flex-shrink-0">
+                          <p className={`text-sm font-bold ${
+                            isPayment ? "text-emerald-400" : "text-red-400"
+                          }`}>
+                            {isPayment ? "-" : "+"}{fmt(displayAmount)}
+                          </p>
+                          {!isPayment && balanceAfter !== undefined && balanceAfter !== null && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">Bal: {fmt(balanceAfter)}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
         </motion.div>
 
         {/* Edit Modal */}

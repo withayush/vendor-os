@@ -70,3 +70,34 @@ export const deleteProduct = async (req, res, next) => {
     next(error);
   }
 };
+
+// T14: Instant Search — ultra-fast typeahead for POS and product picker
+export const searchProducts = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const q = req.query.q || "";
+    const limit = Math.min(parseInt(req.query.limit) || 10, 30); // cap at 30
+
+    const results = await productService.instantSearchProducts(businessId, q, limit);
+
+    return res.status(200).json({
+      success: true,
+      data: { results, count: results.length, query: q }
+    });
+  } catch (error) {
+    console.error("Error in searchProducts:", error);
+    next(error);
+  }
+};
+
+// T14: Get categories for filter dropdown
+export const getProductCategories = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const categories = await productService.getCategories(businessId);
+    return res.status(200).json({ success: true, data: { categories } });
+  } catch (error) {
+    console.error("Error in getProductCategories:", error);
+    next(error);
+  }
+};

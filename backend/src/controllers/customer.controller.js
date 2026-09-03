@@ -1,5 +1,6 @@
 import * as customerService from "../services/customer.service.js";
 
+
 // 1. Get All Customers for Business
 export const getCustomers = async (req, res, next) => {
   try {
@@ -146,22 +147,61 @@ export const recordCustomerPayment = async (req, res, next) => {
   }
 };
 
-// T35: Fetch Customer Credit Payment History & Ledger Transactions
+// T35: Fetch Customer Full Ledger History (all entries + payment summary stats)
 export const getCustomerLedgerHistory = async (req, res, next) => {
   try {
     const businessId = req.businessId;
     const { customerId } = req.params;
 
-    const transactions = await customerService.getLedgerHistory(businessId, customerId);
+    const result = await customerService.getLedgerHistory(businessId, customerId);
 
     return res.status(200).json({
       success: true,
-      data: {
-        transactions
-      }
+      data: result  // { transactions, payment_summary }
     });
   } catch (error) {
     console.error("Error in getCustomerLedgerHistory:", error);
+    next(error);
+  }
+};
+
+// T35: Dedicated Payment Settlement History — ONLY repayments toward credit balances
+export const getCustomerPaymentHistory = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { customerId } = req.params;
+    const { from, to, limit } = req.query;
+
+    const result = await customerService.getPaymentHistory(businessId, customerId, {
+      fromDate: from || null,
+      toDate: to || null,
+      limit: limit ? parseInt(limit) : 100,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: result  // { customer, payments[], summary }
+    });
+  } catch (error) {
+    console.error("Error in getCustomerPaymentHistory:", error);
+    next(error);
+  }
+};
+
+// T36: Full CRM & Profiling Dashboard Data per Customer
+export const getCustomerCRMProfile = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { customerId } = req.params;
+
+    const profile = await customerService.getCustomerCRMProfile(businessId, customerId);
+
+    return res.status(200).json({
+      success: true,
+      data: profile
+    });
+  } catch (error) {
+    console.error("Error in getCustomerCRMProfile:", error);
     next(error);
   }
 };

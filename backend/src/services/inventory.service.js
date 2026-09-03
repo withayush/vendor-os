@@ -199,12 +199,171 @@ export const reconcileStock = async (businessId, body) => {
   }
 };
 
-export const listLedgerLogs = async (businessId, productId) => {
-  const logs = await inventoryRepo.findLedgerLogs(businessId, productId);
-  return logs;
+export const listLedgerLogs = async (businessId, queryParams = {}) => {
+  const options = typeof queryParams === "string" ? { productId: queryParams } : queryParams;
+  const logs = await inventoryRepo.findLedgerLogs(businessId, {
+    productId: options.productId || null,
+    type: options.type || null,
+    invoiceId: options.invoiceId || null,
+    limit: parseInt(options.limit) || 100,
+  });
+
+  return logs.map((log) => ({
+    id: log.ledger_id,
+    productId: log.product_id,
+    productName: log.product_name,
+    sku: log.sku,
+    barcode: log.barcode,
+    unit: log.unit,
+    categoryName: log.category_name,
+    qtyChange: parseFloat(log.qty_change),
+    type: log.type,
+    invoiceId: log.invoice_id,
+    invoiceNumber: log.invoice_number,
+    customerName: log.customer_name,
+    referenceId: log.reference_id,
+    notes: log.notes,
+    createdAt: log.created_at,
+  }));
+};
+
+// T16: Ledger movement totals & breakdown
+export const getLedgerSummary = async (businessId) => {
+  const summary = await inventoryRepo.findLedgerMovementSummary(businessId);
+  return {
+    totalInUnits: parseFloat(summary.total_in_units || 0),
+    totalOutUnits: parseFloat(summary.total_out_units || 0),
+    inCount: parseInt(summary.in_count || 0),
+    outCount: parseInt(summary.out_count || 0),
+    adjustCount: parseInt(summary.adjust_count || 0),
+  };
 };
 
 export const listLowStockAlerts = async (businessId) => {
   const lowStockItems = await inventoryRepo.findLowStockAlerts(businessId);
   return { lowStockItems, count: lowStockItems.length };
 };
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T15: Inventory Store State Model Services
+// ─────────────────────────────────────────────────────────────────────────────
+
+// T15: List inventory store state master records with pagination, search, status filter
+export const getInventoryStoreState = async (businessId, queryParams = {}) => {
+  const search = queryParams.search || "";
+  const status = queryParams.status || null;
+  const sortBy = queryParams.sortBy || "name";
+  const sortDir = queryParams.sortDir || "ASC";
+  const limit = parseInt(queryParams.limit) || 20;
+  const page = parseInt(queryParams.page) || 1;
+  const offset = (page - 1) * limit;
+
+  const totalItems = await inventoryRepo.countInventoryStoreState(businessId, { search, status });
+  const items = await inventoryRepo.findInventoryStoreState(businessId, {
+    search,
+    status,
+    limit,
+    offset,
+    sortBy,
+    sortDir,
+  });
+
+  return {
+    items: items.map((item) => ({
+      inventoryId: item.inventory_id,
+      productId: item.product_id,
+      productName: item.product_name,
+      sku: item.sku,
+      barcode: item.barcode,
+      categoryName: item.category_name,
+      unit: item.unit || "pcs",
+      costPrice: parseFloat(item.cost_price || 0),
+      sellingPrice: parseFloat(item.selling_price || 0),
+      availableStock: parseFloat(item.available_stock || 0),
+      reorderLevel: parseFloat(item.reorder_level || 0),
+      stockStatus: item.stock_status,
+      stockCostValue: parseFloat(item.stock_cost_value || 0),
+      stockRetailValue: parseFloat(item.stock_retail_value || 0),
+      updatedAt: item.updated_at,
+    })),
+    pagination: {
+      totalItems,
+      totalPages: Math.ceil(totalItems / limit) || 1,
+      currentPage: page,
+      limit,
+    },
+  };
+};
+
+// T15: Get single product store state model
+export const getProductStoreState = async (businessId, productId) => {
+  const item = await inventoryRepo.findProductInventoryState(businessId, productId);
+  if (!item) {
+    throw { statusCode: 404, message: "Inventory record not found for this product." };
+  }
+
+  // Also fetch recent ledger flow
+  const recentLogs = await inventoryRepo.findLedgerLogs(businessId, productId);
+
+  return {
+    inventoryId: item.inventory_id,
+    productId: item.product_id,
+    productName: item.product_name,
+    sku: item.sku,
+    barcode: item.barcode,
+    categoryName: item.category_name,
+    unit: item.unit || "pcs",
+    costPrice: parseFloat(item.cost_price || 0),
+    sellingPrice: parseFloat(item.selling_price || 0),
+    availableStock: parseFloat(item.available_stock || 0),
+    reorderLevel: parseFloat(item.reorder_level || 0),
+    stockStatus: item.stock_status,
+    stockCostValue: parseFloat(item.stock_cost_value || 0),
+    stockRetailValue: parseFloat(item.stock_retail_value || 0),
+    updatedAt: item.updated_at,
+    recentMovements: recentLogs.slice(0, 10),
+  };
+};
+
+// T15: Update inventory store parameters (e.g. reorder level threshold)
+export const updateInventoryConfig = async (businessId, productId, body) => {
+  const { reorderLevel } = body;
+  const parsedReorderLevel = parseFloat(reorderLevel);
+
+  if (isNaN(parsedReorderLevel) || parsedReorderLevel < 0) {
+    throw { statusCode: 400, message: "Reorder level must be a valid non-negative number." };
+  }
+
+  const updated = await inventoryRepo.updateInventoryReorderLevel(
+    businessId,
+    productId,
+    parsedReorderLevel
+  );
+
+  if (!updated) {
+    throw { statusCode: 404, message: "Inventory record not found for this product." };
+  }
+
+  return {
+    productId,
+    reorderLevel: parseFloat(updated.reorder_level),
+    availableStock: parseFloat(updated.available_stock),
+    updatedAt: updated.updated_at,
+  };
+};
+
+// T15: Summary valuation & health metrics
+export const getInventoryValuation = async (businessId) => {
+  const summary = await inventoryRepo.getInventoryValuationSummary(businessId);
+  return {
+    totalProducts: parseInt(summary.total_products || 0),
+    totalPhysicalUnits: parseFloat(summary.total_physical_units || 0),
+    totalCostValuation: parseFloat(summary.total_cost_valuation || 0),
+    totalRetailValuation: parseFloat(summary.total_retail_valuation || 0),
+    lowStockCount: parseInt(summary.low_stock_count || 0),
+    outOfStockCount: parseInt(summary.out_of_stock_count || 0),
+    healthyStockCount: parseInt(summary.healthy_stock_count || 0),
+  };
+};
+
