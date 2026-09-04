@@ -10,6 +10,9 @@ export const createProductSchema = z.object({
     unit: z.string().optional().nullable(),
     categoryId: z.string().optional().nullable(),
     categoryName: z.string().optional().nullable(),
+    // T17: Optional opening stock on product creation
+    openingStock: z.number().nonnegative("Opening stock must be >= 0").optional().nullable(),
+    openingStockNotes: z.string().max(500).optional().nullable(),
   }),
 });
 

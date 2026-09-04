@@ -199,7 +199,99 @@ export const reconcileStock = async (businessId, body) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// T17: Opening Stock Initialization Service
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Initialize opening stock for a product.
+ * - Writes an OPENING ledger entry (the first audited value in the ledger)
+ * - Seeds inventory.available_stock with the opening quantity
+ * - Guards against: negative qty, duplicate OPENING entries, setting OPENING after movements exist
+ * - Can be called standalone (POST /inventory/opening-stock) or during product creation
+ */
+export const initializeOpeningStock = async (businessId, body) => {
+  const { productId, openingQty, notes } = body;
+  const parsedQty = parseFloat(openingQty);
+
+  if (isNaN(parsedQty) || parsedQty < 0) {
+    throw { statusCode: 400, message: "Opening stock quantity must be a non-negative number." };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Verify product belongs to this business
+    const product = await inventoryRepo.findProductByIdAndBusiness(businessId, productId, client);
+    if (!product) {
+      throw { statusCode: 404, message: "Product not found or access denied." };
+    }
+
+    // Delegate to DB function (handles all guards atomically)
+    const ledgerEntry = await inventoryRepo.callInitializeOpeningStock(
+      businessId,
+      productId,
+      parsedQty,
+      notes || `Opening stock initialization — ${parsedQty} units seeded as starting audited value`,
+      client
+    );
+
+    await client.query("COMMIT");
+
+    return {
+      ledgerEntry: {
+        id: ledgerEntry.id,
+        productId: ledgerEntry.product_id,
+        qtyChange: parseFloat(ledgerEntry.qty_change),
+        type: ledgerEntry.type,
+        notes: ledgerEntry.notes,
+        createdAt: ledgerEntry.created_at,
+      },
+      availableStock: parsedQty,
+      message: `Opening stock of ${parsedQty} units initialized successfully.`,
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+
+    // Map DB-raised exceptions to friendly HTTP errors
+    if (error.message?.includes("OPENING_STOCK_DUPLICATE")) {
+      throw { statusCode: 409, message: "Opening stock has already been initialized for this product. Use a Stock Adjust (ADJUST) entry to reconcile the balance." };
+    }
+    if (error.message?.includes("OPENING_STOCK_LATE")) {
+      throw { statusCode: 409, message: "Opening stock cannot be set after inventory movements have already been recorded. Use a Stock Adjust (ADJUST) entry to reconcile the balance." };
+    }
+    if (error.message?.includes("OPENING_STOCK_INVALID")) {
+      throw { statusCode: 400, message: "Opening stock quantity cannot be negative." };
+    }
+
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// T17: Get the opening stock entry for a product (audit check)
+export const getOpeningStockEntry = async (businessId, productId) => {
+  const product = await inventoryRepo.findProductByIdAndBusiness(businessId, productId);
+  if (!product) {
+    throw { statusCode: 404, message: "Product not found or access denied." };
+  }
+
+  const entry = await inventoryRepo.findOpeningStockEntry(businessId, productId);
+  return entry
+    ? {
+        id: entry.id,
+        qtyChange: parseFloat(entry.qty_change),
+        type: "OPENING",
+        createdAt: entry.created_at,
+        initialized: true,
+      }
+    : { initialized: false, qtyChange: null };
+};
+
 export const listLedgerLogs = async (businessId, queryParams = {}) => {
+
   const options = typeof queryParams === "string" ? { productId: queryParams } : queryParams;
   const logs = await inventoryRepo.findLedgerLogs(businessId, {
     productId: options.productId || null,
@@ -227,17 +319,20 @@ export const listLedgerLogs = async (businessId, queryParams = {}) => {
   }));
 };
 
-// T16: Ledger movement totals & breakdown
+// T16 & T17: Ledger movement totals & breakdown
 export const getLedgerSummary = async (businessId) => {
   const summary = await inventoryRepo.findLedgerMovementSummary(businessId);
   return {
     totalInUnits: parseFloat(summary.total_in_units || 0),
     totalOutUnits: parseFloat(summary.total_out_units || 0),
+    totalOpeningUnits: parseFloat(summary.total_opening_units || 0),
     inCount: parseInt(summary.in_count || 0),
     outCount: parseInt(summary.out_count || 0),
     adjustCount: parseInt(summary.adjust_count || 0),
+    openingCount: parseInt(summary.opening_count || 0),
   };
 };
+
 
 export const listLowStockAlerts = async (businessId) => {
   const lowStockItems = await inventoryRepo.findLowStockAlerts(businessId);

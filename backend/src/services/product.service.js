@@ -1,6 +1,13 @@
+import { pool } from "../db/db.js";
 import * as productRepo from "../repositories/product.repository.js";
+import * as inventoryRepo from "../repositories/inventory.repository.js";
 
 export const createProduct = async (businessId, body) => {
+  const { openingStock, openingStockNotes } = body;
+  const parsedOpeningStock = openingStock !== undefined && openingStock !== null
+    ? parseFloat(openingStock)
+    : null;
+
   // Check if SKU already exists for this business
   if (body.sku) {
     const existingProduct = await productRepo.findProductBySkuAndBusiness(businessId, body.sku);
@@ -15,8 +22,43 @@ export const createProduct = async (businessId, body) => {
     if (category) body.categoryId = category.id;
   }
 
+  // T17: If openingStock is provided, run product creation + OPENING ledger seeding atomically
+  if (parsedOpeningStock !== null) {
+    if (isNaN(parsedOpeningStock) || parsedOpeningStock < 0) {
+      throw { statusCode: 400, message: "Opening stock must be a non-negative number." };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const product = await productRepo.createProductRecord(businessId, body, client);
+
+      // Seed the OPENING ledger entry via DB function (atomic, guarded)
+      await inventoryRepo.callInitializeOpeningStock(
+        businessId,
+        product.id,
+        parsedOpeningStock,
+        openingStockNotes || `Opening stock initialization — ${parsedOpeningStock} units seeded on product creation`,
+        client
+      );
+
+      await client.query("COMMIT");
+      return { ...product, openingStock: parsedOpeningStock, openingStockInitialized: true };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (error.message?.includes("OPENING_STOCK_DUPLICATE")) {
+        throw { statusCode: 409, message: "Opening stock has already been initialized for this product." };
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // No opening stock provided — standard product creation
   const product = await productRepo.createProductRecord(businessId, body);
-  return product;
+  return { ...product, openingStockInitialized: false };
 };
 
 

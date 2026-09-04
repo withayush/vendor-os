@@ -1,6 +1,45 @@
 import * as inventoryService from "../services/inventory.service.js";
 
-// Record Stock Movement (Task T17)
+// ─────────────────────────────────────────────────────────────────────────────
+// T17: Opening Stock Initialization Controllers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /inventory/opening-stock — seed the initial audited stock for a product
+export const setOpeningStock = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const result = await inventoryService.initializeOpeningStock(businessId, req.body);
+
+    return res.status(201).json({
+      success: true,
+      message: result.message,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in setOpeningStock:", error);
+    next(error);
+  }
+};
+
+// GET /inventory/opening-stock/:productId — check if opening stock has been initialized
+export const getOpeningStock = async (req, res, next) => {
+  try {
+    const businessId = req.businessId;
+    const { productId } = req.params;
+
+    const result = await inventoryService.getOpeningStockEntry(businessId, productId);
+
+    return res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Error in getOpeningStock:", error);
+    next(error);
+  }
+};
+
+// Record General Stock Movement
 export const recordStockMovement = async (req, res, next) => {
   try {
     const businessId = req.businessId;

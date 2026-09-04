@@ -714,7 +714,20 @@ export default function InventoryAuditPage() {
               </div>
 
               {/* Ledger Summary Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-card border border-border p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Initial Seeds (OPENING)</span>
+                    <p className="text-lg font-black text-violet-400 mt-0.5">
+                      +{ledgerSummary.totalOpeningUnits || 0} units
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">{ledgerSummary.openingCount || 0} products initialized</p>
+                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                    <Boxes className="w-4 h-4 text-violet-400" />
+                  </div>
+                </div>
+
                 <div className="bg-card border border-border p-4 rounded-xl flex items-center justify-between">
                   <div>
                     <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Total Inflow (Stock IN)</span>
@@ -767,9 +780,10 @@ export default function InventoryAuditPage() {
                   </div>
 
                   {/* Operation Type Filter Tabs */}
-                  <div className="flex bg-background border border-border rounded-xl p-1 text-xs">
+                  <div className="flex flex-wrap bg-background border border-border rounded-xl p-1 text-xs">
                     {[
                       { key: "", label: "All Movements" },
+                      { key: "OPENING", label: "Opening Stock" },
                       { key: "IN", label: "Stock IN" },
                       { key: "OUT", label: "Stock OUT" },
                       { key: "ADJUST", label: "Adjustments" },
@@ -788,6 +802,7 @@ export default function InventoryAuditPage() {
                     ))}
                   </div>
                 </div>
+
 
                 {logsLoading ? (
                   <div className="py-16 text-center">
@@ -832,10 +847,12 @@ export default function InventoryAuditPage() {
                                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                                       : log.type === "OUT"
                                       ? "bg-destructive/10 text-destructive border-destructive/20"
+                                      : log.type === "OPENING"
+                                      ? "bg-violet-500/10 text-violet-400 border-violet-500/20"
                                       : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                                   }`}
                                 >
-                                  {log.type}
+                                  {log.type === "OPENING" ? "⟳ OPENING" : log.type}
                                 </span>
                               </td>
                               <td className={`px-5 py-3.5 font-mono font-bold ${isPositive ? "text-emerald-400" : "text-destructive"}`}>

@@ -4,6 +4,8 @@ import {
   stockIn, 
   stockOut, 
   adjustStock,
+  setOpeningStock,
+  getOpeningStock,
   getLedgerLogs,
   getLedgerSummary,
   getLowStockAlerts,
@@ -21,7 +23,8 @@ import {
   stockInSchema,
   stockOutSchema,
   adjustStockSchema,
-  updateInventoryConfigSchema
+  updateInventoryConfigSchema,
+  openingStockSchema
 } from "../validations/inventory.validation.js";
 
 const router = express.Router();
@@ -57,7 +60,25 @@ router.put(
 );
 
 
-// T17: Stock In/Out Ledger Write API
+// T17: Opening Stock Initialization API
+// POST — seed initial audited stock for a product (OPENING ledger entry)
+router.post(
+  "/opening-stock",
+  verifyToken,
+  verifyBusinessAccess(["OWNER", "MANAGER"]),
+  validate(openingStockSchema),
+  setOpeningStock
+);
+
+// GET — check if a product has had opening stock initialized
+router.get(
+  "/opening-stock/:productId",
+  verifyToken,
+  verifyBusinessAccess(["OWNER", "MANAGER", "STAFF"]),
+  getOpeningStock
+);
+
+// T17 (legacy): Generic Stock In/Out/Adjust movement endpoint
 router.post(
   "/movement",
   verifyToken,

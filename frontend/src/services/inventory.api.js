@@ -91,5 +91,20 @@ export const getInventoryLedgerSummary = async () => {
 export const getLowStockAlerts = async () => {
   const res = await api.get("/inventory/low-stock", getBusinessHeader());
   return res.data;
+};
 
+// T17: Initialize opening stock for a product
+export const initializeOpeningStock = async ({ productId, openingQty, notes }) => {
+  const res = await api.post(
+    "/inventory/opening-stock",
+    { productId, openingQty: parseFloat(openingQty), notes },
+    getBusinessHeader()
+  );
+  return res.data;
+};
+
+// T17: Check if opening stock has been initialized for a product
+export const getProductOpeningStock = async (productId) => {
+  const res = await api.get(`/inventory/opening-stock/${productId}`, getBusinessHeader());
+  return res.data;
 };

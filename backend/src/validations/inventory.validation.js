@@ -45,3 +45,13 @@ export const updateInventoryConfigSchema = z.object({
   }),
 });
 
+// T17: Opening Stock Initialization Schema (standalone endpoint)
+export const openingStockSchema = z.object({
+  body: z.object({
+    productId: z.string({ required_error: "productId is required" }).uuid("Invalid product ID format"),
+    openingQty: z
+      .number({ required_error: "openingQty is required" })
+      .nonnegative("Opening stock quantity must be >= 0"),
+    notes: z.string().max(500).optional().nullable(),
+  }),
+});

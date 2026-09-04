@@ -95,15 +95,17 @@ export const findLedgerLogs = async (businessId, { productId = null, type = null
   return res.rows;
 };
 
-// T16: Aggregate ledger flow statistics (total IN volume, OUT volume, ADJUST count)
+// T16: Aggregate ledger flow statistics (total IN volume, OUT volume, ADJUST count, OPENING count)
 export const findLedgerMovementSummary = async (businessId) => {
   const res = await query(
     `SELECT
-       COALESCE(SUM(qty_change) FILTER (WHERE type = 'IN'), 0)     AS total_in_units,
+       COALESCE(SUM(qty_change) FILTER (WHERE type = 'IN'), 0)      AS total_in_units,
        COALESCE(ABS(SUM(qty_change) FILTER (WHERE type = 'OUT')), 0) AS total_out_units,
-       COUNT(*) FILTER (WHERE type = 'IN')                        AS in_count,
-       COUNT(*) FILTER (WHERE type = 'OUT')                       AS out_count,
-       COUNT(*) FILTER (WHERE type = 'ADJUST')                    AS adjust_count
+       COUNT(*) FILTER (WHERE type = 'IN')                          AS in_count,
+       COUNT(*) FILTER (WHERE type = 'OUT')                         AS out_count,
+       COUNT(*) FILTER (WHERE type = 'ADJUST')                      AS adjust_count,
+       COUNT(*) FILTER (WHERE type = 'OPENING')                     AS opening_count,
+       COALESCE(SUM(qty_change) FILTER (WHERE type = 'OPENING'), 0) AS total_opening_units
      FROM inventory_ledger
      WHERE business_id = $1`,
     [businessId]
@@ -111,6 +113,40 @@ export const findLedgerMovementSummary = async (businessId) => {
   return res.rows[0] || {};
 };
 
+// T17: Check if OPENING stock entry already exists for this product
+export const findOpeningStockEntry = async (businessId, productId, client = null) => {
+  const executor = client || { query };
+  const res = await executor.query(
+    `SELECT id, qty_change, created_at 
+     FROM inventory_ledger 
+     WHERE business_id = $1 AND product_id = $2 AND type = 'OPENING'
+     LIMIT 1`,
+    [businessId, productId]
+  );
+  return res.rows[0] || null;
+};
+
+// T17: Check if non-OPENING movements already exist for this product
+export const hasExistingMovements = async (businessId, productId, client = null) => {
+  const executor = client || { query };
+  const res = await executor.query(
+    `SELECT COUNT(*) AS cnt
+     FROM inventory_ledger
+     WHERE business_id = $1 AND product_id = $2 AND type IN ('IN', 'OUT', 'ADJUST')`,
+    [businessId, productId]
+  );
+  return parseInt(res.rows[0]?.cnt || 0) > 0;
+};
+
+// T17: Initialize opening stock via DB function (atomic, guarded)
+export const callInitializeOpeningStock = async (businessId, productId, qty, notes, client = null) => {
+  const executor = client || { query };
+  const res = await executor.query(
+    `SELECT * FROM fn_initialize_opening_stock($1, $2, $3, $4)`,
+    [businessId, productId, qty, notes || null]
+  );
+  return res.rows[0] || null;
+};
 
 export const findLowStockAlerts = async (businessId) => {
   const res = await query(

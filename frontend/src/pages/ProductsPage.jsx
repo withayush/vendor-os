@@ -108,6 +108,9 @@ const emptyForm = {
   sellingPrice: "",
   costPrice: "",
   unit: "pcs",
+  // T17: Opening stock initialization fields
+  openingStock: "",
+  openingStockNotes: "",
 };
 
 export default function ProductsPage() {
@@ -230,7 +233,7 @@ export default function ProductsPage() {
     if (!form.name.trim() || !form.sellingPrice) return toast.error("Name and selling price are required");
     setSubmitting(true);
     try {
-      await createProduct({
+      const payload = {
         name: form.name.trim(),
         sku: form.sku.trim() || null,
         barcode: form.barcode.trim() || null,
@@ -238,8 +241,25 @@ export default function ProductsPage() {
         sellingPrice: parseFloat(form.sellingPrice),
         costPrice: form.costPrice ? parseFloat(form.costPrice) : 0,
         unit: form.unit.trim() || "pcs",
-      });
-      toast.success("Product added successfully!");
+      };
+
+      // T17: Attach opening stock if provided
+      if (form.openingStock !== "" && form.openingStock !== null) {
+        const openingQty = parseFloat(form.openingStock);
+        if (!isNaN(openingQty) && openingQty >= 0) {
+          payload.openingStock = openingQty;
+          payload.openingStockNotes = form.openingStockNotes.trim() || null;
+        }
+      }
+
+      const result = await createProduct(payload);
+
+      if (result?.data?.openingStockInitialized) {
+        toast.success(`Product added with opening stock of ${form.openingStock} units!`, { icon: "📦" });
+      } else {
+        toast.success("Product added successfully!");
+      }
+
       setShowAdd(false);
       setForm(emptyForm);
       setPage(1);
@@ -422,6 +442,55 @@ export default function ProductsPage() {
         <span>Price adjustments do not retroactively alter historic invoices. Audit records stay fully preserved.</span>
       </div>
 
+      {/* T17: Opening Stock Initialization — only for new products */}
+      {!editTarget && (
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Opening Stock (Optional)</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <div className="p-3 bg-primary/5 border border-primary/15 rounded-xl">
+            <div className="flex items-start gap-2 mb-3">
+              <Package className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Set the initial audited stock for this product. This seeds an <span className="font-bold text-primary font-mono">OPENING</span> ledger entry — the first immutable record in the inventory audit trail. Leave blank to start with zero stock.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Opening Qty" icon={Boxes}>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  className={inputCls}
+                  placeholder="0"
+                  value={form.openingStock}
+                  onChange={(e) => setForm({ ...form, openingStock: e.target.value })}
+                />
+              </Field>
+              <Field label="Opening Note (optional)" icon={Tag}>
+                <input
+                  className={inputCls}
+                  placeholder="e.g. Initial stock count"
+                  value={form.openingStockNotes}
+                  onChange={(e) => setForm({ ...form, openingStockNotes: e.target.value })}
+                />
+              </Field>
+            </div>
+
+            {form.openingStock !== "" && parseFloat(form.openingStock) > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 text-[11px] text-primary font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Opening stock of <span className="font-bold">{form.openingStock} {form.unit || "pcs"}</span> will be seeded as the starting audited ledger value.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-2.5 pt-2">
         <button
           type="button"
@@ -441,6 +510,7 @@ export default function ProductsPage() {
       </div>
     </form>
   );
+
 
   return (
     <div className="min-h-screen bg-background text-foreground p-4 md:p-8 max-w-7xl mx-auto">

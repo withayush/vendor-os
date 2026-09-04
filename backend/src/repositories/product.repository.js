@@ -9,8 +9,9 @@ export const findProductBySkuAndBusiness = async (businessId, sku) => {
   return res.rows[0] || null;
 };
 
-export const createProductRecord = async (businessId, data) => {
-  const res = await query(
+export const createProductRecord = async (businessId, data, client = null) => {
+  const executor = client || { query };
+  const res = await executor.query(
     `INSERT INTO products (business_id, category_id, name, sku, barcode, selling_price, cost_price, unit)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
@@ -27,6 +28,7 @@ export const createProductRecord = async (businessId, data) => {
   );
   return res.rows[0];
 };
+
 
 // T14: Count products with category-aware search (uses v_product_search view)
 export const countProducts = async (businessId, search, isArchived, categoryId) => {
